@@ -244,7 +244,7 @@
 
     fetch(WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json', 'X-GBZ-Token': 'gbz_9f4m2k7xBialyZab'},
       body: JSON.stringify({
         message: text,
         sessionId: sessionId
