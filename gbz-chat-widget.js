@@ -158,7 +158,7 @@
     +   '</div>'
     +   '<div class="gbz-messages"></div>'
     +   '<div class="gbz-input-area">'
-    +     '<input class="gbz-input" type="text" placeholder="Napisz wiadomo\u015B\u0107..." autocomplete="off" />'
+    +     '<input class="gbz-input" type="text" placeholder="Napisz wiadomo\u015B\u0107..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" name="gbz-chat-msg" />'
     +     '<button class="gbz-send" aria-label="Wy\u015Blij" disabled>'
     +       '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
     +         '<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>'
