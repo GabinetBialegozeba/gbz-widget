@@ -203,39 +203,65 @@
   function linkify(text) {
     var placeholders = [];
 
-    // Step 1: Convert markdown [text](url) to clickable <a> tags
-    // Supports https, mailto, tel, sms protocols
-    // Stores as placeholders so Step 2 won't double-link them
+    function store(tag) {
+      var ph = '%%LINK' + placeholders.length + '%%';
+      placeholders.push(tag);
+      return ph;
+    }
+
+    function esc(s) {
+      return s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Step 1: Parse markdown [text](url)
+    // Uses [^(]{0,10} instead of \s* to handle invisible chars and line breaks
     var result = text.replace(
-      /\[([^\]]+)\]\s*\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
-      function(match, label, url) {
-        var safe = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var tag;
+      /\[([^\]]+)\][^(]{0,10}\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
+      function(m, label, url) {
+        var safe = esc(label);
         if (/^https?:\/\//.test(url)) {
-          tag = '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>';
-        } else {
-          tag = '<a href="' + url + '">' + safe + '</a>';
+          return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>');
         }
-        var ph = '%%LINK' + placeholders.length + '%%';
-        placeholders.push(tag);
-        return ph;
+        return store('<a href="' + url + '">' + safe + '</a>');
       }
     );
 
-    // Step 2: Convert any remaining raw URLs (fallback for non-markdown output)
+    // Step 2: Raw URLs not already linked
+    result = result.replace(/(https?:\/\/[^\s<]+)/g, function(url) {
+      return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>');
+    });
+
+    // Step 3: Raw email addresses
     result = result.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+      /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g,
+      function(email) {
+        return store('<a href="mailto:' + email + '">' + email + '</a>');
+      }
     );
 
-    // Step 3: Restore placeholders
+    // Step 4: Raw Polish phone numbers (32 132 27 49 or +48321322749)
+    result = result.replace(
+      /((?:\+48[\s\-]?)?(?:\d{2}[\s\-]\d{3}[\s\-]\d{2}[\s\-]\d{2}))/g,
+      function(phone) {
+        var digits = phone.replace(/[\s\-]/g, '');
+        if (!/^\+/.test(digits)) digits = '+48' + digits;
+        return store('<a href="tel:' + digits + '">' + phone + '</a>');
+      }
+    );
+
+    // Step 5: Clean leftover protocol artifacts like (tel:...) (mailto:...) (sms:...)
+    result = result.replace(/\s*\((?:tel:|mailto:|sms:)[^)]*\)/g, '');
+
+    // Step 6: Clean orphaned brackets around placeholders [%%LINK0%%] -> %%LINK0%%
+    result = result.replace(/\[(%%LINK\d+%%)\]/g, '$1');
+
+    // Step 7: Restore all placeholders
     for (var i = 0; i < placeholders.length; i++) {
       result = result.replace('%%LINK' + i + '%%', placeholders[i]);
     }
 
     return result;
   }
-
   function addMessage(text, sender) {
     var div = document.createElement('div');
     div.className = 'gbz-msg ' + sender;
