@@ -201,7 +201,39 @@
   });
 
   function linkify(text) {
-    return text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    var placeholders = [];
+
+    // Step 1: Convert markdown [text](url) to clickable <a> tags
+    // Supports https, mailto, tel, sms protocols
+    // Stores as placeholders so Step 2 won't double-link them
+    var result = text.replace(
+      /\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
+      function(match, label, url) {
+        var safe = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var tag;
+        if (/^https?:\/\//.test(url)) {
+          tag = '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>';
+        } else {
+          tag = '<a href="' + url + '">' + safe + '</a>';
+        }
+        var ph = '%%LINK' + placeholders.length + '%%';
+        placeholders.push(tag);
+        return ph;
+      }
+    );
+
+    // Step 2: Convert any remaining raw URLs (fallback for non-markdown output)
+    result = result.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+
+    // Step 3: Restore placeholders
+    for (var i = 0; i < placeholders.length; i++) {
+      result = result.replace('%%LINK' + i + '%%', placeholders[i]);
+    }
+
+    return result;
   }
 
   function addMessage(text, sender) {
