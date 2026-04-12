@@ -207,7 +207,7 @@
     // Supports https, mailto, tel, sms protocols
     // Stores as placeholders so Step 2 won't double-link them
     var result = text.replace(
-      /\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
+      /\[([^\]]+)\]\s*\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
       function(match, label, url) {
         var safe = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var tag;
