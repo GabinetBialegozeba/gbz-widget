@@ -132,6 +132,7 @@
     '    max-height: calc(100dvh - 120px); border-radius: 14px;',
     '  }',
     '  .gbz-messages { min-height: 200px; max-height: calc(100dvh - 280px); }',
+    '  .gbz-input { font-size: 16px; }',
     '}'
   ].join('\n');
   shadow.appendChild(style);
