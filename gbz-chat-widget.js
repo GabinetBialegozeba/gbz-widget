@@ -202,69 +202,77 @@
 
   function linkify(text) {
     var placeholders = [];
-
+  
     function store(tag) {
       var ph = '%%LINK' + placeholders.length + '%%';
       placeholders.push(tag);
       return ph;
     }
-
+  
     function esc(s) {
-      return s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
-
-    // Step 1: Parse markdown [text](url)
-    // FIX: Added \s* to handle unexpected spaces and 'i' flag for case-insensitivity (e.g., Tel:)
-    var result = text.replace(
-      /\[([^\]]+)\][^()]{0,15}\(\s*((?:https?:\/\/|mailto:|tel:|sms:)[^)]+?)\s*\)/gi,
+  
+    // Normalize invisible Unicode junk that LLMs love to insert
+    var result = text
+      .replace(/\u200B/g, '')   // zero-width space
+      .replace(/\u200C/g, '')   // zero-width non-joiner
+      .replace(/\u200D/g, '')   // zero-width joiner
+      .replace(/\uFEFF/g, '')   // BOM / zero-width no-break space
+      .replace(/\u00AD/g, '');  // soft hyphen
+  
+    // Step 1: Markdown [text](url) with flexible gap between ] and (
+    result = result.replace(
+      /\[([^\]]+)\]\s{0,5}\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/gi,
       function(m, label, url) {
-        var safe = esc(label.trim());
-        var cleanUrl = url.trim();
-        // Regex is case-insensitive, so we test the protocol case-insensitively too
-        if (/^https?:\/\//i.test(cleanUrl)) {
-          return store('<a href="' + cleanUrl + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>');
+        var safe = esc(label);
+        if (/^https?:\/\//i.test(url)) {
+          return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>');
         }
-        return store('<a href="' + cleanUrl + '">' + safe + '</a>');
+        return store('<a href="' + url + '">' + safe + '</a>');
       }
     );
-
+  
     // Step 2: Raw URLs not already linked
-    result = result.replace(/(https?:\/\/[^\s<]+)/gi, function(url) {
-      return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>');
+    result = result.replace(/(https?:\/\/[^\s<]+)/g, function(url) {
+      return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>');
     });
-
+  
     // Step 3: Raw email addresses
     result = result.replace(
-      /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/gi,
+      /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g,
       function(email) {
-        return store('<a href="mailto:' + email.toLowerCase() + '">' + email + '</a>');
+        return store('<a href="mailto:' + email + '">' + esc(email) + '</a>');
       }
     );
-
+  
     // Step 4: Raw Polish phone numbers
-    // FIX: Added fallback to catch 9-digit numbers grouped together without spaces (e.g., +48321322749)
     result = result.replace(
-      /((?:\+48[\s\-]?)?(?:\d{2}[\s\-]\d{3}[\s\-]\d{2}[\s\-]\d{2}|\d{9}))/g,
+      /((?:\+48[\s\u00A0\-]?)?(?:\d{2}[\s\u00A0\-]\d{3}[\s\u00A0\-]\d{2}[\s\u00A0\-]\d{2}))/g,
       function(phone) {
-        var digits = phone.replace(/[\s\-]/g, '');
+        var digits = phone.replace(/[\s\u00A0\-]/g, '');
         if (!/^\+/.test(digits)) digits = '+48' + digits;
-        return store('<a href="tel:' + digits + '">' + phone + '</a>');
+        return store('<a href="tel:' + digits + '">' + esc(phone) + '</a>');
       }
     );
-
-    // Step 5: Clean leftover protocol artifacts like (tel:...) (mailto:...) (sms:...)
-    // FIX: Added \s* and 'i' flag to ensure stray artifacts are aggressively removed
-    result = result.replace(/\s*\(\s*(?:tel:|mailto:|sms:)[^)]*\)/gi, '');
-
-    // Step 6: Clean orphaned brackets around placeholders [%%LINK0%%] -> %%LINK0%%
-    // FIX: Added \s* to handle potential spaces left inside brackets
-    result = result.replace(/\[\s*(%%LINK\d+%%)\s*\]/g, '$1');
-
-    // Step 7: Restore all placeholders
+  
+    // Step 5: Clean leftover (tel:...) (mailto:...) (sms:...) artifacts
+    result = result.replace(/\s*\((?:tel:|mailto:|sms:)[^)]*\)/gi, '');
+  
+    // Step 6: Clean orphaned brackets around placeholders
+    result = result.replace(/\[(%%LINK\d+%%)\]/g, '$1');
+  
+    // Step 7: Escape remaining text (everything that's NOT a placeholder)
+    result = result.replace(/(%%LINK\d+%%)|([^%]+|%(?!%LINK\d+%%))+/g, function(m, placeholder) {
+      if (placeholder) return placeholder;
+      return esc(m);
+    });
+  
+    // Step 8: Restore all placeholders
     for (var i = 0; i < placeholders.length; i++) {
       result = result.replace('%%LINK' + i + '%%', placeholders[i]);
     }
-
+  
     return result;
   }
   
