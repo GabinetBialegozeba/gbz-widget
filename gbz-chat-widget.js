@@ -202,70 +202,85 @@
 
   function linkify(text) {
     var placeholders = [];
-
+  
     function store(tag) {
       var ph = '%%LINK' + placeholders.length + '%%';
       placeholders.push(tag);
       return ph;
     }
-
+  
     function esc(s) {
-      return s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
-
-    // Step 1: Parse markdown [text](url)
-    // Uses [^(]{0,10} instead of \s* to handle invisible chars and line breaks
-    var result = text.replace(
-      /\[([^\]]+)\][^(]{0,10}\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/g,
+  
+    // Normalize invisible Unicode junk that LLMs love to insert
+    var result = text
+      .replace(/\u200B/g, '')   // zero-width space
+      .replace(/\u200C/g, '')   // zero-width non-joiner
+      .replace(/\u200D/g, '')   // zero-width joiner
+      .replace(/\uFEFF/g, '')   // BOM / zero-width no-break space
+      .replace(/\u00AD/g, '');  // soft hyphen
+  
+    // Step 1: Markdown [text](url) with flexible gap between ] and (
+    result = result.replace(
+      /\[([^\]]+)\]\s{0,5}\(((?:https?:\/\/|mailto:|tel:|sms:)[^)]+)\)/gi,
       function(m, label, url) {
         var safe = esc(label);
-        if (/^https?:\/\//.test(url)) {
+        if (/^https?:\/\//i.test(url)) {
           return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + safe + '</a>');
         }
         return store('<a href="' + url + '">' + safe + '</a>');
       }
     );
-
+  
     // Step 2: Raw URLs not already linked
     result = result.replace(/(https?:\/\/[^\s<]+)/g, function(url) {
-      return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>');
+      return store('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>');
     });
-
+  
     // Step 3: Raw email addresses
     result = result.replace(
       /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g,
       function(email) {
-        return store('<a href="mailto:' + email + '">' + email + '</a>');
+        return store('<a href="mailto:' + email + '">' + esc(email) + '</a>');
       }
     );
-
-    // Step 4: Raw Polish phone numbers (32 132 27 49 or +48321322749)
+  
+    // Step 4: Raw Polish phone numbers
     result = result.replace(
-      /((?:\+48[\s\-]?)?(?:\d{2}[\s\-]\d{3}[\s\-]\d{2}[\s\-]\d{2}))/g,
+      /((?:\+48[\s\u00A0\-]?)?(?:\d{2}[\s\u00A0\-]\d{3}[\s\u00A0\-]\d{2}[\s\u00A0\-]\d{2}))/g,
       function(phone) {
-        var digits = phone.replace(/[\s\-]/g, '');
+        var digits = phone.replace(/[\s\u00A0\-]/g, '');
         if (!/^\+/.test(digits)) digits = '+48' + digits;
-        return store('<a href="tel:' + digits + '">' + phone + '</a>');
+        return store('<a href="tel:' + digits + '">' + esc(phone) + '</a>');
       }
     );
-
-    // Step 5: Clean leftover protocol artifacts like (tel:...) (mailto:...) (sms:...)
-    result = result.replace(/\s*\((?:tel:|mailto:|sms:)[^)]*\)/g, '');
-
-    // Step 6: Clean orphaned brackets around placeholders [%%LINK0%%] -> %%LINK0%%
+  
+    // Step 5: Clean leftover (tel:...) (mailto:...) (sms:...) artifacts
+    result = result.replace(/\s*\((?:tel:|mailto:|sms:)[^)]*\)/gi, '');
+  
+    // Step 6: Clean orphaned brackets around placeholders
     result = result.replace(/\[(%%LINK\d+%%)\]/g, '$1');
-
-    // Step 7: Restore all placeholders
+  
+    // Step 7: Escape remaining text (everything that's NOT a placeholder)
+    result = result.replace(/(%%LINK\d+%%)|([^%]+|%(?!%LINK\d+%%))+/g, function(m, placeholder) {
+      if (placeholder) return placeholder;
+      return esc(m);
+    });
+  
+    // Step 8: Restore all placeholders
     for (var i = 0; i < placeholders.length; i++) {
       result = result.replace('%%LINK' + i + '%%', placeholders[i]);
     }
-
+  
     return result;
   }
+  
   function addMessage(text, sender) {
     var div = document.createElement('div');
     div.className = 'gbz-msg ' + sender;
     if (sender === 'gbz-bot') {
+      console.log('RAW BOT TEXT:', JSON.stringify(text));
       div.innerHTML = linkify(text);
     } else {
       div.textContent = text;
